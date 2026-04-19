@@ -1,43 +1,55 @@
 package com.protelion.hexclient.presentation.viewmodel
 
-import android.app.Application
 import android.content.*
 import android.os.*
-import androidx.lifecycle.*
-import com.protelion.hexclient.data.service.HexService
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.protelion.hexclient.data.local.dao.HexDao
 import com.protelion.hexclient.domain.model.HexCode
-import com.protelion.hexclient.domain.repository.HexRepository
+import com.protelion.hexclient.data.service.HexService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class MainViewModel(
-    private val app: Application,
-    private val repository: HexRepository
+    private val context: Context,
+    private val repository: HexDao
 ) : ViewModel() {
 
-    private val _serviceStatus = MutableStateFlow("Stopped")
+    private val _serviceStatus = MutableStateFlow("STOPPED")
     val serviceStatus = _serviceStatus.asStateFlow()
 
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating = _isGenerating.asStateFlow()
 
+    private val _isPaused = MutableStateFlow(false)
+    val isPaused = _isPaused.asStateFlow()
+
     private val _currentInterval = MutableStateFlow(1000L)
     val currentInterval = _currentInterval.asStateFlow()
 
-    val history: StateFlow<List<HexCode>> = repository.getLocalHistory()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _totalCount = MutableStateFlow(0)
+    val totalCount = _totalCount.asStateFlow()
 
-    private val statusReceiver = object : BroadcastReceiver() {
+    val history: StateFlow<List<HexCode>> = repository.getHistory()
+        .map { list -> list.map { HexCode(it.id, it.value, it.timestamp) } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let {
-                val gen = it.getBooleanExtra("isGenerating", false)
-                val paused = it.getBooleanExtra("isPaused", false)
-                _isGenerating.value = gen
-                _currentInterval.value = it.getLongExtra("interval", 1000L)
-                _serviceStatus.value = when {
-                    paused -> "PAUSE"
-                    gen -> "GENERATING"
-                    else -> "RUNNING"
+            when (intent?.action) {
+                HexService.ACTION_STATUS_REPLY -> {
+                    val gen = intent.getBooleanExtra("isGenerating", false)
+                    val paused = intent.getBooleanExtra("isPaused", false)
+                    _isGenerating.value = gen
+                    _isPaused.value = paused
+                    _currentInterval.value = intent.getLongExtra("interval", 1000L)
+                    _totalCount.value = intent.getIntExtra("count", 0)
+                    
+                    _serviceStatus.value = when {
+                        paused -> "PAUSED"
+                        gen -> "GENERATING"
+                        else -> "IDLE"
+                    }
                 }
             }
         }
@@ -45,46 +57,38 @@ class MainViewModel(
 
     init {
         val filter = IntentFilter(HexService.ACTION_STATUS_REPLY)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            app.registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            app.registerReceiver(statusReceiver, filter)
-        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         requestHistoryFromService()
     }
 
-    fun sendCommand(action: String, extraKey: String? = null, extraValue: Long? = null) {
-        val intent = Intent(app, HexService::class.java).apply {
+    fun sendCommand(action: String, key: String? = null, value: Long? = null) {
+        val intent = Intent(context, HexService::class.java).apply {
             this.action = action
-            extraKey?.let { putExtra(it, extraValue) }
+            if (key != null && value != null) putExtra(key, value)
         }
-        app.startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
     }
 
     private fun requestHistoryFromService() {
-        val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
-            override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                val codes = resultData?.getStringArray("codes") ?: return
-                val times = resultData.getLongArray("times") ?: return
-                viewModelScope.launch {
-                    codes.forEachIndexed { i, s ->
-                        repository.saveCode(HexCode(value = s, timestamp = times[i]))
-                    }
-                }
-            }
-        }
-        val intent = Intent(app, HexService::class.java).apply {
+        val intent = Intent(context, HexService::class.java).apply {
             action = HexService.CMD_GET_HISTORY
-            putExtra("receiver", receiver)
+            putExtra("receiver", object : ResultReceiver(Handler(Looper.getMainLooper())) {
+                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                }
+            })
         }
-        app.startService(intent)
+        context.startService(intent)
     }
 
-    fun deleteCode(id: Long) = viewModelScope.launch { repository.deleteCode(id) }
+    fun deleteCode(id: Long) = viewModelScope.launch { repository.deleteById(id) }
     fun clearAll() = viewModelScope.launch { repository.clearAll() }
 
     override fun onCleared() {
         super.onCleared()
-        app.unregisterReceiver(statusReceiver)
+        context.unregisterReceiver(receiver)
     }
 }

@@ -5,30 +5,35 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.protelion.hexclient.presentation.viewmodel.MainViewModel
 import com.protelion.hexclient.data.service.HexService
 import com.protelion.hexclient.domain.model.HexCode
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val status by viewModel.serviceStatus.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
+    val isPaused by viewModel.isPaused.collectAsState()
     val interval by viewModel.currentInterval.collectAsState()
+    val totalCount by viewModel.totalCount.collectAsState()
     val codes by viewModel.history.collectAsState()
 
     MainScreenContent(
         status = status,
         isGenerating = isGenerating,
+        isPaused = isPaused,
         interval = interval,
+        totalCount = totalCount,
         codes = codes,
-        onSendCommand = {
-            action,
-            key,
-            value -> viewModel.sendCommand(action, key, value)
-        },
+        onSendCommand = { action, key, value -> viewModel.sendCommand(action, key, value) },
         onDeleteCode = { viewModel.deleteCode(it) },
         onClearAll = { viewModel.clearAll() }
     )
@@ -38,22 +43,37 @@ fun MainScreen(viewModel: MainViewModel) {
 fun MainScreenContent(
     status: String,
     isGenerating: Boolean,
+    isPaused: Boolean,
     interval: Long,
+    totalCount: Int,
     codes: List<HexCode>,
     onSendCommand: (String, String?, Long?) -> Unit,
     onDeleteCode: (Long) -> Unit,
     onClearAll: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Status: $status", style = MaterialTheme.typography.headlineMedium)
+    val clipboardManager = LocalClipboardManager.current
+    val sdf = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
-        if (isGenerating) {
-            Text("Generating...", color = MaterialTheme.colorScheme.primary)
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).safeDrawingPadding()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = when(status) {
+                    "GENERATING" -> MaterialTheme.colorScheme.primaryContainer
+                    "PAUSED" -> MaterialTheme.colorScheme.secondaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                }
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Status: $status", style = MaterialTheme.typography.headlineSmall)
+                Text("Total Generated: $totalCount")
+                Text("Interval: ${interval}ms")
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Text("Interval: ${interval}ms")
         Slider(
             value = interval.toFloat(),
             onValueChange = { onSendCommand(HexService.CMD_SET_INTERVAL, "interval", it.toLong()) },
@@ -63,17 +83,28 @@ fun MainScreenContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(codes, key = { it.timestamp }) { hex ->
+            items(codes, key = { "${it.id}_${it.timestamp}" }) { hex ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    onClick = { onDeleteCode(hex.id) }
+                    onClick = { 
+                        clipboardManager.setText(AnnotatedString(hex.value))
+                    }
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(hex.value)
-                        Text(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(hex.timestamp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(hex.value, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                sdf.format(Date(hex.timestamp)),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        IconButton(onClick = { onDeleteCode(hex.id) }) {
+                            Text("Remove")
+                        }
                     }
                 }
             }
@@ -81,18 +112,34 @@ fun MainScreenContent(
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(onClick = { onSendCommand(HexService.CMD_START, null, null) }) {
-                Text("Start")
-            }
-            Button(onClick = { onSendCommand(HexService.CMD_STOP, null, null) }) {
-                Text("Stop")
-            }
-            Button(onClick = { onClearAll() }) {
-                Text("Clear")
-            }
+            Button(
+                onClick = { onSendCommand(HexService.CMD_START, null, null) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Start") }
+            
+            Button(
+                onClick = { onSendCommand(HexService.CMD_TOGGLE_GEN, null, null) },
+                modifier = Modifier.weight(1f)
+            ) { Text(if (isGenerating) "Stop Gen" else "Start Gen") }
+
+            Button(
+                onClick = { onSendCommand(HexService.CMD_PAUSE, null, null) },
+                modifier = Modifier.weight(1f)
+            ) { Text(if (isPaused) "Resume" else "Pause") }
         }
+        
+        OutlinedButton(
+            onClick = { onClearAll() },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) { Text("Clear All") }
+        
+        Button(
+            onClick = { onSendCommand(HexService.CMD_STOP, null, null) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) { Text("Stop Service") }
     }
 }
 
@@ -101,12 +148,14 @@ fun MainScreenContent(
 fun MainScreenPreview() {
     MaterialTheme {
         MainScreenContent(
-            status = "RUNNING",
+            status = "GENERATING",
             isGenerating = true,
+            isPaused = false,
             interval = 1000L,
+            totalCount = 42,
             codes = listOf(
-                HexCode(1, "ABCDEF", System.currentTimeMillis()),
-                HexCode(2, "123456", System.currentTimeMillis() - 10000)
+                HexCode(1, "ABCDEF1234567890ABCDEF12", System.currentTimeMillis()),
+                HexCode(2, "1234567890ABCDEF12345678", System.currentTimeMillis() - 10000)
             ),
             onSendCommand = { _, _, _ -> },
             onDeleteCode = {},

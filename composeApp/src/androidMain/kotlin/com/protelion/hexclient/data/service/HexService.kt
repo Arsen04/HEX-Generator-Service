@@ -41,10 +41,10 @@ class HexService : LifecycleService() {
         createNotificationChannel()
 
         when (intent?.action) {
-            CMD_START -> { isGenerating = false; isPaused = false }
+            CMD_START -> { isGenerating = true; isPaused = false }
             CMD_STOP -> stopSelf()
             CMD_TOGGLE_GEN -> isGenerating = !isGenerating
-            CMD_PAUSE -> isPaused = !isPaused //  [cite: 59, 61]
+            CMD_PAUSE -> isPaused = !isPaused
             CMD_SET_INTERVAL -> interval = intent.getLongExtra("interval", 1000L)
             CMD_GET_HISTORY -> {
                 val receiver = intent.getParcelableExtra<ResultReceiver>("receiver")
@@ -52,14 +52,14 @@ class HexService : LifecycleService() {
             }
         }
 
-        startForeground(1, buildNotification())
+        updateNotification()
         broadcastStatus()
         startLoop()
         return START_STICKY
     }
 
     private fun startLoop() {
-        job?.cancel()
+        if (job?.isActive == true) return
         job = lifecycleScope.launch {
             while (true) {
                 if (isGenerating && !isPaused) {
@@ -71,10 +71,11 @@ class HexService : LifecycleService() {
                     sendBroadcast(Intent(ACTION_NEW_CODE).apply {
                         putExtra("code", code)
                         putExtra("time", entity.timestamp)
-                    }) // [cite: 24, 42]
+                    })
                 }
-                delay(interval) // [cite: 60, 61]
+                delay(interval)
                 broadcastStatus()
+                updateNotification()
             }
         }
     }
@@ -86,34 +87,43 @@ class HexService : LifecycleService() {
             putExtra("interval", interval)
             putExtra("count", totalGenerated)
         }
-        sendBroadcast(statusIntent) // [cite: 34]
+        sendBroadcast(statusIntent)
     }
 
     private fun sendHistoryToClient(receiver: ResultReceiver?) {
         lifecycleScope.launch {
-            val history = hexDao.getLastN(50) // [cite: 62]
+            val history = hexDao.getLastN(100)
             val bundle = Bundle().apply {
                 putStringArray("codes", history.map { it.value }.toTypedArray())
                 putLongArray("times", history.map { it.timestamp }.toLongArray())
             }
-            receiver?.send(200, bundle) // [cite: 29, 56]
+            receiver?.send(200, bundle)
         }
     }
 
+    private fun updateNotification() {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(1, buildNotification())
+    }
+
     private fun buildNotification(): Notification {
-        val stopIntent = PendingIntent.getService(
-            this,
-            0,
-            Intent(this,
-                HexService::class.java
-            ).apply { action = CMD_STOP },
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopIntent = PendingIntent.getService(this, 0, Intent(this, HexService::class.java).apply { action = CMD_STOP }, PendingIntent.FLAG_IMMUTABLE)
+        val toggleIntent = PendingIntent.getService(this, 1, Intent(this, HexService::class.java).apply { action = CMD_TOGGLE_GEN }, PendingIntent.FLAG_IMMUTABLE)
+        val pauseIntent = PendingIntent.getService(this, 2, Intent(this, HexService::class.java).apply { action = CMD_PAUSE }, PendingIntent.FLAG_IMMUTABLE)
+
+        val statusText = when {
+            isPaused -> "PAUSED"
+            isGenerating -> "GENERATING"
+            else -> "IDLE"
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HEX Generator: ${if(isPaused) "PAUSED" else if(isGenerating) "GENERATING" else "IDLE"}")
+            .setContentTitle("HEX Generator: $statusText")
+            .setContentText("Generated: $totalGenerated | Interval: ${interval}ms")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", stopIntent) // [cite: 63, 66]
+            .addAction(android.R.drawable.ic_media_play, if(isGenerating) "Stop Gen" else "Start Gen", toggleIntent)
+            .addAction(android.R.drawable.ic_media_pause, if(isPaused) "Resume" else "Pause", pauseIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", stopIntent)
             .setOngoing(true)
             .build()
     }
