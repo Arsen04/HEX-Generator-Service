@@ -34,6 +34,7 @@ fun MainScreen(viewModel: MainViewModel) {
         totalCount = totalCount,
         codes = codes,
         onSendCommand = { action, key, value -> viewModel.sendCommand(action, key, value) },
+        onRestoreHistory = { viewModel.restoreHistory() },
         onDeleteCode = { viewModel.deleteCode(it) },
         onClearAll = { viewModel.clearAll() }
     )
@@ -48,6 +49,7 @@ fun MainScreenContent(
     totalCount: Int,
     codes: List<HexCode>,
     onSendCommand: (String, String?, Long?) -> Unit,
+    onRestoreHistory: () -> Unit,
     onDeleteCode: (Long) -> Unit,
     onClearAll: () -> Unit
 ) {
@@ -61,7 +63,8 @@ fun MainScreenContent(
                 containerColor = when(status) {
                     "GENERATING" -> MaterialTheme.colorScheme.primaryContainer
                     "PAUSED" -> MaterialTheme.colorScheme.secondaryContainer
-                    else -> MaterialTheme.colorScheme.surfaceVariant
+                    "STOPPED" -> MaterialTheme.colorScheme.surfaceVariant
+                    else -> MaterialTheme.colorScheme.tertiaryContainer
                 }
             )
         ) {
@@ -74,6 +77,7 @@ fun MainScreenContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        Text("Set Interval:")
         Slider(
             value = interval.toFloat(),
             onValueChange = { onSendCommand(HexService.CMD_SET_INTERVAL, "interval", it.toLong()) },
@@ -103,12 +107,14 @@ fun MainScreenContent(
                             )
                         }
                         IconButton(onClick = { onDeleteCode(hex.id) }) {
-                            Text("Remove")
+                            Text("X")
                         }
                     }
                 }
             }
         }
+
+        val isServiceRunning = status != "STOPPED"
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -116,18 +122,32 @@ fun MainScreenContent(
         ) {
             Button(
                 onClick = { onSendCommand(HexService.CMD_START, null, null) },
-                modifier = Modifier.weight(1f)
-            ) { Text("Start") }
+                modifier = Modifier.weight(1f),
+                enabled = !isServiceRunning
+            ) { Text("Start Service") }
             
             Button(
                 onClick = { onSendCommand(HexService.CMD_TOGGLE_GEN, null, null) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = isServiceRunning
             ) { Text(if (isGenerating) "Stop Gen" else "Start Gen") }
+        }
 
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Button(
                 onClick = { onSendCommand(HexService.CMD_PAUSE, null, null) },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                enabled = isServiceRunning && isGenerating
             ) { Text(if (isPaused) "Resume" else "Pause") }
+
+            Button(
+                onClick = { onRestoreHistory() },
+                modifier = Modifier.weight(1f),
+                enabled = isServiceRunning
+            ) { Text("Restore 50") }
         }
         
         OutlinedButton(
@@ -138,7 +158,8 @@ fun MainScreenContent(
         Button(
             onClick = { onSendCommand(HexService.CMD_STOP, null, null) },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            enabled = isServiceRunning
         ) { Text("Stop Service") }
     }
 }
@@ -158,6 +179,7 @@ fun MainScreenPreview() {
                 HexCode(2, "1234567890ABCDEF12345678", System.currentTimeMillis() - 10000)
             ),
             onSendCommand = { _, _, _ -> },
+            onRestoreHistory = {},
             onDeleteCode = {},
             onClearAll = {}
         )

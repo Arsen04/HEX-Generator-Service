@@ -5,6 +5,7 @@ import android.os.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.protelion.hexclient.data.local.dao.HexDao
+import com.protelion.hexclient.data.local.entity.HexEntity
 import com.protelion.hexclient.domain.model.HexCode
 import com.protelion.hexclient.data.service.HexService
 import kotlinx.coroutines.flow.*
@@ -57,8 +58,12 @@ class MainViewModel(
 
     init {
         val filter = IntentFilter(HexService.ACTION_STATUS_REPLY)
-        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-        requestHistoryFromService()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        restoreHistory()
     }
 
     fun sendCommand(action: String, key: String? = null, value: Long? = null) {
@@ -73,11 +78,21 @@ class MainViewModel(
         }
     }
 
-    private fun requestHistoryFromService() {
+    fun restoreHistory() {
         val intent = Intent(context, HexService::class.java).apply {
             action = HexService.CMD_GET_HISTORY
             putExtra("receiver", object : ResultReceiver(Handler(Looper.getMainLooper())) {
                 override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                    if (resultCode == 200 && resultData != null) {
+                        val codes = resultData.getStringArray("codes") ?: emptyArray()
+                        val times = resultData.getLongArray("times") ?: longArrayOf()
+                        
+                        viewModelScope.launch {
+                            codes.indices.forEach { i ->
+                                repository.insert(HexEntity(value = codes[i], timestamp = times[i]))
+                            }
+                        }
+                    }
                 }
             })
         }
@@ -85,10 +100,13 @@ class MainViewModel(
     }
 
     fun deleteCode(id: Long) = viewModelScope.launch { repository.deleteById(id) }
+
     fun clearAll() = viewModelScope.launch { repository.clearAll() }
 
     override fun onCleared() {
         super.onCleared()
-        context.unregisterReceiver(receiver)
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: Exception) {}
     }
 }

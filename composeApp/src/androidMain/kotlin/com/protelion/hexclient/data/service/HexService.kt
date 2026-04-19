@@ -10,7 +10,9 @@ import com.protelion.hexclient.data.local.dao.HexDao
 import com.protelion.hexclient.data.local.entity.HexEntity
 import com.protelion.hexclient.domain.usecase.GenerateHexUseCase
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import org.koin.android.ext.android.inject
+import java.util.concurrent.CopyOnWriteArrayList
 
 class HexService : LifecycleService() {
     private val hexDao: HexDao by inject()
@@ -22,12 +24,13 @@ class HexService : LifecycleService() {
     private var totalGenerated = 0
     private var job: Job? = null
 
+    private val serviceHistory = CopyOnWriteArrayList<HexEntity>()
+
     companion object {
         const val CHANNEL_ID = "hex_gen_channel"
         const val ACTION_NEW_CODE = "com.protelion.hex.NEW_CODE"
         const val ACTION_STATUS_REPLY = "com.protelion.hex.STATUS_REPLY"
 
-        // Commands
         const val CMD_START = "START"
         const val CMD_STOP = "STOP"
         const val CMD_TOGGLE_GEN = "TOGGLE_GEN"
@@ -41,7 +44,10 @@ class HexService : LifecycleService() {
         createNotificationChannel()
 
         when (intent?.action) {
-            CMD_START -> { isGenerating = true; isPaused = false }
+            CMD_START -> { 
+                isGenerating = false 
+                isPaused = false 
+            }
             CMD_STOP -> stopSelf()
             CMD_TOGGLE_GEN -> isGenerating = !isGenerating
             CMD_PAUSE -> isPaused = !isPaused
@@ -54,18 +60,24 @@ class HexService : LifecycleService() {
 
         updateNotification()
         broadcastStatus()
-        startLoop()
+        startGenerationFlow()
         return START_STICKY
     }
 
-    private fun startLoop() {
+    private fun startGenerationFlow() {
         if (job?.isActive == true) return
         job = lifecycleScope.launch {
-            while (true) {
+            tickerFlow().collect {
                 if (isGenerating && !isPaused) {
                     val code = generateHexUseCase()
                     val entity = HexEntity(value = code, timestamp = System.currentTimeMillis())
-                    hexDao.insert(entity)
+                    
+                    serviceHistory.add(0, entity)
+                    if (serviceHistory.size > 100) {
+                        serviceHistory.removeAt(serviceHistory.size - 1)
+                    }
+
+                    hexDao.insertAndTrim(entity)
                     totalGenerated++
 
                     sendBroadcast(Intent(ACTION_NEW_CODE).apply {
@@ -73,43 +85,46 @@ class HexService : LifecycleService() {
                         putExtra("time", entity.timestamp)
                     })
                 }
-                delay(interval)
                 broadcastStatus()
                 updateNotification()
             }
         }
     }
 
+    private fun tickerFlow() = flow {
+        while (true) {
+            emit(Unit)
+            delay(interval)
+        }
+    }.flowOn(Dispatchers.Default)
+
     private fun broadcastStatus() {
-        val statusIntent = Intent(ACTION_STATUS_REPLY).apply {
+        sendBroadcast(Intent(ACTION_STATUS_REPLY).apply {
             putExtra("isGenerating", isGenerating)
             putExtra("isPaused", isPaused)
             putExtra("interval", interval)
             putExtra("count", totalGenerated)
-        }
-        sendBroadcast(statusIntent)
+        })
     }
 
     private fun sendHistoryToClient(receiver: ResultReceiver?) {
-        lifecycleScope.launch {
-            val history = hexDao.getLastN(100)
-            val bundle = Bundle().apply {
-                putStringArray("codes", history.map { it.value }.toTypedArray())
-                putLongArray("times", history.map { it.timestamp }.toLongArray())
-            }
-            receiver?.send(200, bundle)
+        val history = serviceHistory.take(50)
+        val bundle = Bundle().apply {
+            putStringArray("codes", history.map { it.value }.toTypedArray())
+            putLongArray("times", history.map { it.timestamp }.toLongArray())
         }
+        receiver?.send(200, bundle)
     }
 
     private fun updateNotification() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(1, buildNotification())
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(1, buildNotification())
     }
 
     private fun buildNotification(): Notification {
-        val stopIntent = PendingIntent.getService(this, 0, Intent(this, HexService::class.java).apply { action = CMD_STOP }, PendingIntent.FLAG_IMMUTABLE)
-        val toggleIntent = PendingIntent.getService(this, 1, Intent(this, HexService::class.java).apply { action = CMD_TOGGLE_GEN }, PendingIntent.FLAG_IMMUTABLE)
-        val pauseIntent = PendingIntent.getService(this, 2, Intent(this, HexService::class.java).apply { action = CMD_PAUSE }, PendingIntent.FLAG_IMMUTABLE)
+        val stopPending = createPendingIntent(CMD_STOP)
+        val togglePending = createPendingIntent(CMD_TOGGLE_GEN)
+        val pausePending = createPendingIntent(CMD_PAUSE)
 
         val statusText = when {
             isPaused -> "PAUSED"
@@ -118,19 +133,24 @@ class HexService : LifecycleService() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HEX Generator: $statusText")
-            .setContentText("Generated: $totalGenerated | Interval: ${interval}ms")
+            .setContentTitle("HEX Service: $statusText")
+            .setContentText("Total: $totalGenerated | Interval: ${interval}ms")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .addAction(android.R.drawable.ic_media_play, if(isGenerating) "Stop Gen" else "Start Gen", toggleIntent)
-            .addAction(android.R.drawable.ic_media_pause, if(isPaused) "Resume" else "Pause", pauseIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", stopIntent)
+            .addAction(0, if (isGenerating) "Stop Gen" else "Start Gen", togglePending)
+            .addAction(0, if (isPaused) "Resume" else "Pause", pausePending)
+            .addAction(0, "Exit", stopPending)
             .setOngoing(true)
             .build()
     }
 
+    private fun createPendingIntent(action: String): PendingIntent {
+        val intent = Intent(this, HexService::class.java).apply { this.action = action }
+        return PendingIntent.getService(this, action.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE)
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "HEX Generator Service", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(CHANNEL_ID, "HEX Service", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }

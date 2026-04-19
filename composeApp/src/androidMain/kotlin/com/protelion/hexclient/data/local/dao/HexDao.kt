@@ -15,8 +15,14 @@ interface HexDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(hex: HexEntity)
 
-    @Delete
-    suspend fun delete(hex: HexEntity)
+    @Transaction
+    suspend fun insertAndTrim(hex: HexEntity) {
+        insert(hex)
+        deleteOldRecords(100)
+    }
+
+    @Query("DELETE FROM hex_history WHERE id NOT IN (SELECT id FROM hex_history ORDER BY timestamp DESC LIMIT :limit)")
+    suspend fun deleteOldRecords(limit: Int)
 
     @Query("DELETE FROM hex_history WHERE id = :id")
     suspend fun deleteById(id: Long)
