@@ -1,5 +1,11 @@
 package com.protelion.hexclient.presentation.screen
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,12 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.protelion.hexclient.presentation.viewmodel.MainViewModel
 import com.protelion.hexclient.data.service.HexService
 import com.protelion.hexclient.domain.model.HexCode
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -25,6 +33,24 @@ fun MainScreen(viewModel: MainViewModel) {
     val interval by viewModel.currentInterval.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val codes by viewModel.history.collectAsState()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                val data = viewModel.getExportData()
+                context.contentResolver.openOutputStream(it)?.use { stream ->
+                    stream.write(data.toByteArray())
+                }
+            }
+        }
+    }
 
     MainScreenContent(
         status = status,
@@ -33,13 +59,17 @@ fun MainScreen(viewModel: MainViewModel) {
         interval = interval,
         totalCount = totalCount,
         codes = codes,
+        isDarkTheme = isDarkTheme ?: systemDark,
+        onToggleTheme = { viewModel.toggleTheme(it) },
         onSendCommand = { action, key, value -> viewModel.sendCommand(action, key, value) },
         onRestoreHistory = { viewModel.restoreHistory() },
         onDeleteCode = { viewModel.deleteCode(it) },
-        onClearAll = { viewModel.clearAll() }
+        onClearAll = { viewModel.clearAll() },
+        onExport = { exportLauncher.launch("hex_history_${System.currentTimeMillis()}.csv") }
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreenContent(
     status: String,
@@ -48,25 +78,44 @@ fun MainScreenContent(
     interval: Long,
     totalCount: Int,
     codes: List<HexCode>,
+    isDarkTheme: Boolean,
+    onToggleTheme: (Boolean) -> Unit,
     onSendCommand: (String, String?, Long?) -> Unit,
     onRestoreHistory: () -> Unit,
     onDeleteCode: (Long) -> Unit,
-    onClearAll: () -> Unit
+    onClearAll: () -> Unit,
+    onExport: () -> Unit
 ) {
     val clipboardManager = LocalClipboardManager.current
     val sdf = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
 
+    val statusColor by animateColorAsState(
+        targetValue = when(status) {
+            "GENERATING" -> MaterialTheme.colorScheme.primaryContainer
+            "PAUSED" -> MaterialTheme.colorScheme.secondaryContainer
+            "STOPPED" -> MaterialTheme.colorScheme.surfaceVariant
+            else -> MaterialTheme.colorScheme.tertiaryContainer
+        },
+        animationSpec = tween(500),
+        label = "StatusColorAnimation"
+    )
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).safeDrawingPadding()) {
+        // Переключатель темы
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Dark Mode", style = MaterialTheme.typography.titleMedium)
+            Switch(checked = isDarkTheme, onCheckedChange = onToggleTheme)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = when(status) {
-                    "GENERATING" -> MaterialTheme.colorScheme.primaryContainer
-                    "PAUSED" -> MaterialTheme.colorScheme.secondaryContainer
-                    "STOPPED" -> MaterialTheme.colorScheme.surfaceVariant
-                    else -> MaterialTheme.colorScheme.tertiaryContainer
-                }
-            )
+            colors = CardDefaults.cardColors(containerColor = statusColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Status: $status", style = MaterialTheme.typography.headlineSmall)
@@ -77,7 +126,7 @@ fun MainScreenContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text("Set Interval:")
+        Text("Set Interval:", style = MaterialTheme.typography.labelLarge)
         Slider(
             value = interval.toFloat(),
             onValueChange = { onSendCommand(HexService.CMD_SET_INTERVAL, "interval", it.toLong()) },
@@ -86,10 +135,19 @@ fun MainScreenContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(codes, key = { "${it.id}_${it.timestamp}" }) { hex ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem(
+                            placementSpec = tween(durationMillis = 500),
+                            fadeInSpec = null,
+                            fadeOutSpec = null
+                        ),
                     onClick = { 
                         clipboardManager.setText(AnnotatedString(hex.value))
                     }
@@ -150,14 +208,24 @@ fun MainScreenContent(
             ) { Text("Restore 50") }
         }
         
-        OutlinedButton(
-            onClick = { onClearAll() },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        ) { Text("Clear All") }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { onClearAll() },
+                modifier = Modifier.weight(1f)
+            ) { Text("Clear All") }
+
+            OutlinedButton(
+                onClick = { onExport() },
+                modifier = Modifier.weight(1f)
+            ) { Text("Export CSV") }
+        }
         
         Button(
             onClick = { onSendCommand(HexService.CMD_STOP, null, null) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             enabled = isServiceRunning
         ) { Text("Stop Service") }
@@ -178,10 +246,13 @@ fun MainScreenPreview() {
                 HexCode(1, "ABCDEF1234567890ABCDEF12", System.currentTimeMillis()),
                 HexCode(2, "1234567890ABCDEF12345678", System.currentTimeMillis() - 10000)
             ),
+            isDarkTheme = false,
+            onToggleTheme = {},
             onSendCommand = { _, _, _ -> },
             onRestoreHistory = {},
             onDeleteCode = {},
-            onClearAll = {}
+            onClearAll = {},
+            onExport = {}
         )
     }
 }

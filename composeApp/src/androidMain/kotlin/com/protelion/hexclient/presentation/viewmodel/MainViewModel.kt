@@ -31,6 +31,9 @@ class MainViewModel(
     private val _totalCount = MutableStateFlow(0)
     val totalCount = _totalCount.asStateFlow()
 
+    private val _isDarkTheme = MutableStateFlow<Boolean?>(null)
+    val isDarkTheme = _isDarkTheme.asStateFlow()
+
     val history: StateFlow<List<HexCode>> = repository.getHistory()
         .map { list -> list.map { HexCode(it.id, it.value, it.timestamp) } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -102,6 +105,19 @@ class MainViewModel(
     fun deleteCode(id: Long) = viewModelScope.launch { repository.deleteById(id) }
 
     fun clearAll() = viewModelScope.launch { repository.clearAll() }
+
+    fun toggleTheme(isDark: Boolean) {
+        _isDarkTheme.value = isDark
+    }
+
+    suspend fun getExportData(): String {
+        val historyList = repository.getLastN(100)
+        val csvContent = StringBuilder("ID,HEX_CODE,TIMESTAMP\n")
+        historyList.forEach { item ->
+            csvContent.append("${item.id},${item.value},${item.timestamp}\n")
+        }
+        return csvContent.toString()
+    }
 
     override fun onCleared() {
         super.onCleared()
