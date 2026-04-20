@@ -26,6 +26,7 @@ class HexService : Service() {
     private var isGenerating = false
     private var isPaused = false
     private var currentInterval = 1000L
+    private var totalGeneratedCount = 0
 
     companion object {
         private const val CHANNEL_ID = "HexServiceChannel"
@@ -55,11 +56,7 @@ class HexService : Service() {
             "ACTION_PAUSE" -> togglePause()
             "ACTION_UPDATE_INTERVAL" -> {
                 currentInterval = intent.getLongExtra("interval", 1000L)
-                if (isGenerating && !isPaused) {
-                    startGeneration()
-                } else {
-                    sendStatus()
-                }
+                sendStatus()
             }
             "ACTION_REQUEST_HISTORY" -> sendHistory()
             "ACTION_GET_STATUS" -> sendStatus()
@@ -118,6 +115,7 @@ class HexService : Service() {
             while (isActive) {
                 if (!isPaused) {
                     val hexCode = generateHexUseCase()
+                    totalGeneratedCount++
                     val entity = HexEntity(value = hexCode, timestamp = System.currentTimeMillis())
                     hexDao.insertAndTrim(entity)
                     sendHexBroadcast(hexCode)
@@ -142,6 +140,7 @@ class HexService : Service() {
             putExtra("isGenerating", isGenerating)
             putExtra("isPaused", isPaused)
             putExtra("interval", currentInterval)
+            putExtra("totalGenerated", totalGeneratedCount)
             setPackage("com.protelion.hexclient")
         }
         sendBroadcast(intent)

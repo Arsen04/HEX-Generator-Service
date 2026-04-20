@@ -9,6 +9,9 @@ interface HexDao {
     @Query("SELECT * FROM hex_history ORDER BY timestamp DESC LIMIT 100")
     fun getHistory(): Flow<List<HexEntity>>
 
+    @Query("SELECT COUNT(*) FROM hex_history")
+    fun getCount(): Flow<Int>
+
     @Query("SELECT * FROM hex_history ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getLastN(limit: Int): List<HexEntity>
 

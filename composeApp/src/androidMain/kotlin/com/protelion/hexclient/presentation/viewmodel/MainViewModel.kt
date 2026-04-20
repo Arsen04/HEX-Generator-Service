@@ -28,6 +28,9 @@ class MainViewModel(
     private val _currentInterval = MutableStateFlow(1000L)
     val currentInterval: StateFlow<Long> = _currentInterval.asStateFlow()
 
+    private val _totalGenerated = MutableStateFlow(0)
+    val totalGenerated: StateFlow<Int> = _totalGenerated.asStateFlow()
+
     val isDarkTheme: StateFlow<Boolean?> = settingsRepository.isDarkTheme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -45,6 +48,7 @@ class MainViewModel(
                     _isGenerating.value = intent.getBooleanExtra("isGenerating", false)
                     _isPaused.value = intent.getBooleanExtra("isPaused", false)
                     _currentInterval.value = intent.getLongExtra("interval", 1000L)
+                    _totalGenerated.value = intent.getIntExtra("totalGenerated", 0)
                 }
                 "com.protelion.hexservice.NEW_HEX" -> {
                     val value = intent.getStringExtra("hex")

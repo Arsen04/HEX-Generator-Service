@@ -11,7 +11,7 @@ class HexRepositoryImpl(private val hexDao: HexDao) : HexRepository {
         hexDao.getHistory().map { list -> list.take(limit).map { it.toDomain() } }
 
     override fun getTotalCount(): Flow<Int> = 
-        hexDao.getHistory().map { it.size }
+        hexDao.getCount()
 
     override suspend fun getAllCodesList(): List<HexCode> = 
         hexDao.getLastN(Int.MAX_VALUE).map { it.toDomain() }

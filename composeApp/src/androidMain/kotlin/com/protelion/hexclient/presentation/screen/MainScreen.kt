@@ -30,6 +30,7 @@ fun MainScreen(viewModel: MainViewModel) {
     val isPaused by viewModel.isPaused.collectAsState()
     val interval by viewModel.currentInterval.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
+    val totalGeneratedByService by viewModel.totalGenerated.collectAsState()
     val codes by viewModel.history.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val scope = rememberCoroutineScope()
@@ -55,6 +56,7 @@ fun MainScreen(viewModel: MainViewModel) {
         isPaused = isPaused,
         interval = interval,
         totalCount = totalCount,
+        totalGeneratedByService = totalGeneratedByService,
         codes = codes,
         isDarkTheme = isDarkTheme ?: systemDark,
         onToggleTheme = { viewModel.toggleTheme(it) },
@@ -74,6 +76,7 @@ fun MainScreenContent(
     isPaused: Boolean,
     interval: Long,
     totalCount: Int,
+    totalGeneratedByService: Int,
     codes: List<HexCode>,
     isDarkTheme: Boolean,
     onToggleTheme: (Boolean) -> Unit,
@@ -115,7 +118,8 @@ fun MainScreenContent(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Status: $status", style = MaterialTheme.typography.headlineSmall)
-                Text("Total Generated: $totalCount")
+                Text("Local Count: $totalCount")
+                Text("Service Total: $totalGeneratedByService")
                 Text("Interval: ${interval}ms")
             }
         }
