@@ -1,58 +1,57 @@
 package com.protelion.hexclient.presentation.viewmodel
 
+import android.app.Application
 import android.content.*
-import android.os.*
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.protelion.hexclient.data.local.dao.HexDao
-import com.protelion.hexclient.data.local.entity.HexEntity
 import com.protelion.hexclient.domain.model.HexCode
-import com.protelion.hexclient.data.service.HexService
+import com.protelion.hexclient.domain.repository.HexRepository
+import com.protelion.hexclient.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class MainViewModel(
-    private val context: Context,
-    private val repository: HexDao
-) : ViewModel() {
+    application: Application,
+    private val repository: HexRepository,
+    private val settingsRepository: SettingsRepository
+) : AndroidViewModel(application) {
 
     private val _serviceStatus = MutableStateFlow("STOPPED")
-    val serviceStatus = _serviceStatus.asStateFlow()
+    val serviceStatus: StateFlow<String> = _serviceStatus.asStateFlow()
 
     private val _isGenerating = MutableStateFlow(false)
-    val isGenerating = _isGenerating.asStateFlow()
+    val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
 
     private val _isPaused = MutableStateFlow(false)
-    val isPaused = _isPaused.asStateFlow()
+    val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
     private val _currentInterval = MutableStateFlow(1000L)
-    val currentInterval = _currentInterval.asStateFlow()
+    val currentInterval: StateFlow<Long> = _currentInterval.asStateFlow()
 
-    private val _totalCount = MutableStateFlow(0)
-    val totalCount = _totalCount.asStateFlow()
+    val isDarkTheme: StateFlow<Boolean?> = settingsRepository.isDarkTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _isDarkTheme = MutableStateFlow<Boolean?>(null)
-    val isDarkTheme = _isDarkTheme.asStateFlow()
-
-    val history: StateFlow<List<HexCode>> = repository.getHistory()
-        .map { list -> list.map { HexCode(it.id, it.value, it.timestamp) } }
+    val history: StateFlow<List<HexCode>> = repository.getLatestCodes(50)
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val totalCount: StateFlow<Int> = repository.getTotalCount()
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                HexService.ACTION_STATUS_REPLY -> {
-                    val gen = intent.getBooleanExtra("isGenerating", false)
-                    val paused = intent.getBooleanExtra("isPaused", false)
-                    _isGenerating.value = gen
-                    _isPaused.value = paused
+                "com.protelion.hexservice.STATUS_UPDATE" -> {
+                    _serviceStatus.value = intent.getStringExtra("status") ?: "STOPPED"
+                    _isGenerating.value = intent.getBooleanExtra("isGenerating", false)
+                    _isPaused.value = intent.getBooleanExtra("isPaused", false)
                     _currentInterval.value = intent.getLongExtra("interval", 1000L)
-                    _totalCount.value = intent.getIntExtra("count", 0)
-                    
-                    _serviceStatus.value = when {
-                        paused -> "PAUSED"
-                        gen -> "GENERATING"
-                        else -> "IDLE"
+                }
+                "com.protelion.hexservice.NEW_HEX" -> {
+                    val value = intent.getStringExtra("hex")
+                    value?.let { 
+                        viewModelScope.launch {
+                            repository.insertHex(it)
+                        }
                     }
                 }
             }
@@ -60,69 +59,69 @@ class MainViewModel(
     }
 
     init {
-        val filter = IntentFilter(HexService.ACTION_STATUS_REPLY)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
+        val filter = IntentFilter().apply {
+            addAction("com.protelion.hexservice.STATUS_UPDATE")
+            addAction("com.protelion.hexservice.NEW_HEX")
         }
-        restoreHistory()
+        val flag = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            Context.RECEIVER_EXPORTED
+        } else {
+            0
+        }
+        application.registerReceiver(receiver, filter, flag)
+        getStatus()
     }
 
-    fun sendCommand(action: String, key: String? = null, value: Long? = null) {
-        val intent = Intent(context, HexService::class.java).apply {
-            this.action = action
-            if (key != null && value != null) putExtra(key, value)
+    fun sendCommand(action: String, key: String?, value: Long?) {
+        val intent = Intent("com.protelion.hexservice.$action").apply {
+            component = ComponentName("com.protelion.hexserver", "com.protelion.hexserver.data.service.HexService")
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            key?.let { putExtra(it, value) }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(getApplication(), intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun toggleTheme(isDark: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDarkTheme(isDark)
+        }
+    }
+
+    fun deleteCode(id: Long) {
+        viewModelScope.launch {
+            repository.deleteCode(id)
+        }
+    }
+
+    fun clearAll() {
+        viewModelScope.launch {
+            repository.deleteAll()
         }
     }
 
     fun restoreHistory() {
-        val intent = Intent(context, HexService::class.java).apply {
-            action = HexService.CMD_GET_HISTORY
-            putExtra("receiver", object : ResultReceiver(Handler(Looper.getMainLooper())) {
-                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                    if (resultCode == 200 && resultData != null) {
-                        val codes = resultData.getStringArray("codes") ?: emptyArray()
-                        val times = resultData.getLongArray("times") ?: longArrayOf()
-                        
-                        viewModelScope.launch {
-                            codes.indices.forEach { i ->
-                                repository.insert(HexEntity(value = codes[i], timestamp = times[i]))
-                            }
-                        }
-                    }
-                }
-            })
-        }
-        context.startService(intent)
+        sendCommand("ACTION_REQUEST_HISTORY", null, null)
     }
 
-    fun deleteCode(id: Long) = viewModelScope.launch { repository.deleteById(id) }
-
-    fun clearAll() = viewModelScope.launch { repository.clearAll() }
-
-    fun toggleTheme(isDark: Boolean) {
-        _isDarkTheme.value = isDark
+    fun getStatus() {
+        sendCommand("ACTION_GET_STATUS", null, null)
     }
 
     suspend fun getExportData(): String {
-        val historyList = repository.getLastN(100)
-        val csvContent = StringBuilder("ID,HEX_CODE,TIMESTAMP\n")
-        historyList.forEach { item ->
-            csvContent.append("${item.id},${item.value},${item.timestamp}\n")
+        val allCodes = repository.getAllCodesList()
+        val sb = StringBuilder("ID,Hex Value,Timestamp\n")
+        allCodes.forEach {
+            sb.append("${it.id},${it.value},${it.timestamp}\n")
         }
-        return csvContent.toString()
+        return sb.toString()
     }
 
     override fun onCleared() {
         super.onCleared()
-        try {
-            context.unregisterReceiver(receiver)
-        } catch (e: Exception) {}
+        getApplication<Application>().unregisterReceiver(receiver)
     }
 }

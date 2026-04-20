@@ -16,10 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.protelion.hexclient.presentation.viewmodel.MainViewModel
-import com.protelion.hexclient.data.service.HexService
 import com.protelion.hexclient.domain.model.HexCode
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -34,7 +32,6 @@ fun MainScreen(viewModel: MainViewModel) {
     val totalCount by viewModel.totalCount.collectAsState()
     val codes by viewModel.history.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
-    
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val systemDark = isSystemInDarkTheme()
@@ -101,7 +98,6 @@ fun MainScreenContent(
     )
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).safeDrawingPadding()) {
-        // Переключатель темы
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -125,11 +121,10 @@ fun MainScreenContent(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
         Text("Set Interval:", style = MaterialTheme.typography.labelLarge)
         Slider(
             value = interval.toFloat(),
-            onValueChange = { onSendCommand(HexService.CMD_SET_INTERVAL, "interval", it.toLong()) },
+            onValueChange = { onSendCommand("ACTION_UPDATE_INTERVAL", "interval", it.toLong()) },
             valueRange = 100f..5000f
         )
 
@@ -148,9 +143,7 @@ fun MainScreenContent(
                             fadeInSpec = null,
                             fadeOutSpec = null
                         ),
-                    onClick = { 
-                        clipboardManager.setText(AnnotatedString(hex.value))
-                    }
+                    onClick = { clipboardManager.setText(AnnotatedString(hex.value)) }
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp).fillMaxWidth(),
@@ -179,13 +172,13 @@ fun MainScreenContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { onSendCommand(HexService.CMD_START, null, null) },
+                onClick = { onSendCommand("ACTION_START", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = !isServiceRunning
             ) { Text("Start Service") }
-            
+
             Button(
-                onClick = { onSendCommand(HexService.CMD_TOGGLE_GEN, null, null) },
+                onClick = { onSendCommand("ACTION_GENERATE", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning
             ) { Text(if (isGenerating) "Stop Gen" else "Start Gen") }
@@ -196,7 +189,7 @@ fun MainScreenContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { onSendCommand(HexService.CMD_PAUSE, null, null) },
+                onClick = { onSendCommand("ACTION_PAUSE", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning && isGenerating
             ) { Text(if (isPaused) "Resume" else "Pause") }
@@ -207,7 +200,7 @@ fun MainScreenContent(
                 enabled = isServiceRunning
             ) { Text("Restore 50") }
         }
-        
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -222,37 +215,12 @@ fun MainScreenContent(
                 modifier = Modifier.weight(1f)
             ) { Text("Export CSV") }
         }
-        
+
         Button(
-            onClick = { onSendCommand(HexService.CMD_STOP, null, null) },
+            onClick = { onSendCommand("ACTION_STOP", null, null) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             enabled = isServiceRunning
         ) { Text("Stop Service") }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun MainScreenPreview() {
-    MaterialTheme {
-        MainScreenContent(
-            status = "GENERATING",
-            isGenerating = true,
-            isPaused = false,
-            interval = 1000L,
-            totalCount = 42,
-            codes = listOf(
-                HexCode(1, "ABCDEF1234567890ABCDEF12", System.currentTimeMillis()),
-                HexCode(2, "1234567890ABCDEF12345678", System.currentTimeMillis() - 10000)
-            ),
-            isDarkTheme = false,
-            onToggleTheme = {},
-            onSendCommand = { _, _, _ -> },
-            onRestoreHistory = {},
-            onDeleteCode = {},
-            onClearAll = {},
-            onExport = {}
-        )
     }
 }

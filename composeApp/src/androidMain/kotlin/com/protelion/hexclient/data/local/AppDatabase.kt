@@ -1,7 +1,6 @@
 package com.protelion.hexclient.data.local
 
-import androidx.room.Database
-import androidx.room.RoomDatabase
+import androidx.room.*
 import com.protelion.hexclient.data.local.dao.HexDao
 import com.protelion.hexclient.data.local.entity.HexEntity
 

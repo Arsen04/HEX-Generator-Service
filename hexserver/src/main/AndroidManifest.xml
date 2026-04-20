@@ -1,23 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <queries>
-        <package android:name="com.protelion.hexserver" />
-    </queries>
-
     <application
-        android:name=".HexApp"
+        android:name=".HexServerApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.HexGenerator">
 
         <activity
             android:name=".MainActivity"
@@ -30,11 +25,21 @@
 
         <service
             android:name=".data.service.HexService"
-            android:foregroundServiceType="specialUse"
-            android:exported="false">
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <intent-filter>
+                <action android:name="com.protelion.hexservice.ACTION_START" />
+                <action android:name="com.protelion.hexservice.ACTION_STOP" />
+                <action android:name="com.protelion.hexservice.ACTION_GENERATE" />
+                <action android:name="com.protelion.hexservice.ACTION_PAUSE" />
+                <action android:name="com.protelion.hexservice.ACTION_UPDATE_INTERVAL" />
+                <action android:name="com.protelion.hexservice.ACTION_REQUEST_HISTORY" />
+                <action android:name="com.protelion.hexservice.ACTION_GET_STATUS" />
+            </intent-filter>
             <property android:name="android.app.PROPERTY_SPECIAL_USE_CATEGORY"
-                android:value="Explanation why this app needs HEX generation in background" />
+                android:value="Service provides generated hex codes to client applications" />
         </service>
-
     </application>
+
 </manifest>
