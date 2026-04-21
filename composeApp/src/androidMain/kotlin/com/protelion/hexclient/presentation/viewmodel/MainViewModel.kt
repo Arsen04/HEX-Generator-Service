@@ -8,6 +8,7 @@ import com.protelion.hexclient.domain.model.HexCode
 import com.protelion.hexclient.domain.model.ServiceStatus
 import com.protelion.hexclient.domain.repository.HexRepository
 import com.protelion.hexclient.domain.repository.SettingsRepository
+import com.protelion.hexclient.ipc.IpcConstants
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -44,20 +45,20 @@ class MainViewModel(
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                "com.protelion.hexserver.STATUS_UPDATE" -> {
-                    val statusStr = intent.getStringExtra("status") ?: "STOPPED"
+                IpcConstants.BROADCAST_STATUS -> {
+                    val statusStr = intent.getStringExtra(IpcConstants.EXTRA_STATUS) ?: ServiceStatus.STOPPED.name
                     _serviceStatus.value = try {
                         ServiceStatus.valueOf(statusStr)
                     } catch (e: Exception) {
                         ServiceStatus.STOPPED
                     }
-                    _isGenerating.value = intent.getBooleanExtra("isGenerating", false)
-                    _isPaused.value = intent.getBooleanExtra("isPaused", false)
-                    _currentInterval.value = intent.getLongExtra("interval", 1000L)
-                    _totalGenerated.value = intent.getIntExtra("totalGenerated", 0)
+                    _isGenerating.value = intent.getBooleanExtra(IpcConstants.EXTRA_IS_GENERATING, false)
+                    _isPaused.value = intent.getBooleanExtra(IpcConstants.EXTRA_IS_PAUSED, false)
+                    _currentInterval.value = intent.getLongExtra(IpcConstants.EXTRA_INTERVAL, 1000L)
+                    _totalGenerated.value = intent.getIntExtra(IpcConstants.EXTRA_TOTAL_GENERATED, 0)
                 }
-                "com.protelion.hexserver.NEW_HEX" -> {
-                    val value = intent.getStringExtra("hex")
+                IpcConstants.BROADCAST_NEW_HEX -> {
+                    val value = intent.getStringExtra(IpcConstants.EXTRA_HEX)
                     value?.let { 
                         viewModelScope.launch {
                             repository.insertHex(it)
@@ -70,8 +71,8 @@ class MainViewModel(
 
     init {
         val filter = IntentFilter().apply {
-            addAction("com.protelion.hexserver.STATUS_UPDATE")
-            addAction("com.protelion.hexserver.NEW_HEX")
+            addAction(IpcConstants.BROADCAST_STATUS)
+            addAction(IpcConstants.BROADCAST_NEW_HEX)
         }
         val flag = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             Context.RECEIVER_EXPORTED
@@ -82,10 +83,9 @@ class MainViewModel(
         getStatus()
     }
 
-    fun sendCommand(action: String, key: String?, value: Long?) {
-        val fullAction = "com.protelion.hexserver.$action"
-        val intent = Intent(fullAction).apply {
-            component = ComponentName("com.protelion.hexserver", "com.protelion.hexserver.data.service.HexService")
+    fun sendCommand(action: String, key: String? = null, value: Long? = null) {
+        val intent = Intent(action).apply {
+            component = ComponentName(IpcConstants.SERVER_PACKAGE, IpcConstants.SERVER_SERVICE_CLASS)
             addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
             key?.let { putExtra(it, value) }
         }
@@ -115,11 +115,11 @@ class MainViewModel(
     }
 
     fun restoreHistory() {
-        sendCommand("ACTION_GET_HISTORY", null, null)
+        sendCommand(IpcConstants.ACTION_GET_HISTORY)
     }
 
     fun getStatus() {
-        sendCommand("ACTION_GET_STATUS", null, null)
+        sendCommand(IpcConstants.ACTION_GET_STATUS)
     }
 
     suspend fun getExportData(): String {

@@ -22,6 +22,7 @@ import com.protelion.hexclient.R
 import com.protelion.hexclient.domain.model.HexCode
 import com.protelion.hexclient.domain.model.ServiceStatus
 import com.protelion.hexclient.presentation.viewmodel.MainViewModel
+import com.protelion.hexclient.ipc.IpcConstants
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -137,7 +138,7 @@ fun MainScreenContent(
         Text(stringResource(R.string.set_interval), style = MaterialTheme.typography.labelLarge)
         Slider(
             value = interval.toFloat(),
-            onValueChange = { onSendCommand("ACTION_SET_INTERVAL", "interval", it.toLong()) },
+            onValueChange = { onSendCommand(IpcConstants.ACTION_SET_INTERVAL, IpcConstants.EXTRA_INTERVAL, it.toLong()) },
             valueRange = 100f..5000f
         )
 
@@ -185,13 +186,13 @@ fun MainScreenContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { onSendCommand("ACTION_START", null, null) },
+                onClick = { onSendCommand(IpcConstants.ACTION_START, null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = !isServiceRunning
             ) { Text(stringResource(R.string.start_service)) }
 
             Button(
-                onClick = { onSendCommand("ACTION_TOGGLE_GEN", null, null) },
+                onClick = { onSendCommand(IpcConstants.ACTION_TOGGLE_GEN, null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning
             ) { Text(if (isGenerating) stringResource(R.string.stop_gen) else stringResource(R.string.start_gen)) }
@@ -202,7 +203,7 @@ fun MainScreenContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { onSendCommand("ACTION_PAUSE", null, null) },
+                onClick = { onSendCommand(IpcConstants.ACTION_PAUSE, null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning && isGenerating
             ) { Text(if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause)) }
@@ -230,7 +231,7 @@ fun MainScreenContent(
         }
 
         Button(
-            onClick = { onSendCommand("ACTION_STOP", null, null) },
+            onClick = { onSendCommand(IpcConstants.ACTION_STOP, null, null) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             enabled = isServiceRunning

@@ -13,6 +13,7 @@ import com.protelion.hexserver.data.local.ServiceHexDao
 import com.protelion.hexserver.data.local.entity.HexEntity
 import com.protelion.hexserver.domain.usecase.GenerateHexUseCase
 import com.protelion.hexserver.domain.model.ServiceStatus
+import com.protelion.hexserver.ipc.IpcConstants
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
 
@@ -33,25 +34,10 @@ class HexService : Service() {
         private const val CHANNEL_ID = "HexServiceChannel"
         private const val NOTIFICATION_ID = 1
         
-        // Actions for Client -> Service
-        const val ACTION_START = "com.protelion.hexserver.ACTION_START"
-        const val ACTION_STOP = "com.protelion.hexserver.ACTION_STOP"
-        const val ACTION_TOGGLE_GEN = "com.protelion.hexserver.ACTION_TOGGLE_GEN"
-        const val ACTION_PAUSE = "com.protelion.hexserver.ACTION_PAUSE"
-        const val ACTION_SET_INTERVAL = "com.protelion.hexserver.ACTION_SET_INTERVAL"
-        const val ACTION_GET_HISTORY = "com.protelion.hexserver.ACTION_GET_HISTORY"
-        const val ACTION_GET_STATUS = "com.protelion.hexserver.ACTION_GET_STATUS"
-
         // Internal Actions for Notification Buttons
-        private const val ACTION_NOTIF_TOGGLE = "com.protelion.hexserver.ACTION_NOTIF_TOGGLE"
-        private const val ACTION_NOTIF_PAUSE = "com.protelion.hexserver.ACTION_NOTIF_PAUSE"
-        private const val ACTION_NOTIF_EXIT = "com.protelion.hexserver.ACTION_NOTIF_EXIT"
-        
-        // Broadcast Actions
-        const val BROADCAST_STATUS = "com.protelion.hexserver.STATUS_UPDATE"
-        const val BROADCAST_NEW_HEX = "com.protelion.hexserver.NEW_HEX"
-        
-        const val EXTRA_RESULT_RECEIVER = "extra_receiver"
+        private const val ACTION_NOTIF_TOGGLE = "com.protelion.hexserver.NOTIF_TOGGLE"
+        private const val ACTION_NOTIF_PAUSE = "com.protelion.hexserver.NOTIF_PAUSE"
+        private const val ACTION_NOTIF_EXIT = "com.protelion.hexserver.NOTIF_EXIT"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -63,26 +49,26 @@ class HexService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        val receiver = intent?.getParcelableExtra<android.os.ResultReceiver>(EXTRA_RESULT_RECEIVER)
+        val receiver = intent?.getParcelableExtra<android.os.ResultReceiver>(IpcConstants.EXTRA_RESULT_RECEIVER)
 
         when (action) {
-            ACTION_START -> startService()
-            ACTION_STOP -> stopService()
-            ACTION_TOGGLE_GEN, ACTION_NOTIF_TOGGLE -> {
+            IpcConstants.ACTION_START -> startService()
+            IpcConstants.ACTION_STOP -> stopService()
+            IpcConstants.ACTION_TOGGLE_GEN, ACTION_NOTIF_TOGGLE -> {
                 toggleGeneration()
-                sendConfirmation(receiver, "Generation toggled")
+                sendConfirmation(receiver, getString(R.string.msg_gen_toggled))
             }
-            ACTION_PAUSE, ACTION_NOTIF_PAUSE -> {
+            IpcConstants.ACTION_PAUSE, ACTION_NOTIF_PAUSE -> {
                 togglePause()
-                sendConfirmation(receiver, "Pause toggled")
+                sendConfirmation(receiver, getString(R.string.msg_pause_toggled))
             }
-            ACTION_SET_INTERVAL -> {
-                currentInterval = intent.getLongExtra("interval", 1000L)
+            IpcConstants.ACTION_SET_INTERVAL -> {
+                currentInterval = intent.getLongExtra(IpcConstants.EXTRA_INTERVAL, 1000L)
                 sendStatus()
-                sendConfirmation(receiver, "Interval updated to ${currentInterval}ms")
+                sendConfirmation(receiver, getString(R.string.msg_interval_updated, currentInterval))
             }
-            ACTION_GET_HISTORY -> sendHistory()
-            ACTION_GET_STATUS -> sendStatus()
+            IpcConstants.ACTION_GET_HISTORY -> sendHistory()
+            IpcConstants.ACTION_GET_STATUS -> sendStatus()
             ACTION_NOTIF_EXIT -> stopService()
             else -> ensureForeground()
         }
@@ -90,7 +76,7 @@ class HexService : Service() {
     }
 
     private fun sendConfirmation(receiver: android.os.ResultReceiver?, message: String) {
-        receiver?.send(0, android.os.Bundle().apply { putString("message", message) })
+        receiver?.send(0, android.os.Bundle().apply { putString(IpcConstants.EXTRA_MESSAGE, message) })
     }
 
     private fun startService() {
@@ -165,19 +151,21 @@ class HexService : Service() {
     }
 
     private fun sendStatus() {
-        val intent = Intent(BROADCAST_STATUS).apply {
-            putExtra("status", currentStatus.name)
-            putExtra("isGenerating", isGenerating)
-            putExtra("isPaused", isPaused)
-            putExtra("interval", currentInterval)
-            putExtra("totalGenerated", totalGeneratedCount)
+        val intent = Intent(IpcConstants.BROADCAST_STATUS).apply {
+            putExtra(IpcConstants.EXTRA_STATUS, currentStatus.name)
+            putExtra(IpcConstants.EXTRA_IS_GENERATING, isGenerating)
+            putExtra(IpcConstants.EXTRA_IS_PAUSED, isPaused)
+            putExtra(IpcConstants.EXTRA_INTERVAL, currentInterval)
+            putExtra(IpcConstants.EXTRA_TOTAL_GENERATED, totalGeneratedCount)
+            setPackage(IpcConstants.CLIENT_PACKAGE)
         }
         sendBroadcast(intent)
     }
 
     private fun sendHexBroadcast(hex: String) {
-        val intent = Intent(BROADCAST_NEW_HEX).apply {
-            putExtra("hex", hex)
+        val intent = Intent(IpcConstants.BROADCAST_NEW_HEX).apply {
+            putExtra(IpcConstants.EXTRA_HEX, hex)
+            setPackage(IpcConstants.CLIENT_PACKAGE)
         }
         sendBroadcast(intent)
     }
@@ -243,7 +231,7 @@ class HexService : Service() {
         return builder.build()
     }
 
-    private fun updateNotification(): Unit {
+    private fun updateNotification() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, createNotification())
     }
