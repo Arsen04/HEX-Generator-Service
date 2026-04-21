@@ -12,6 +12,7 @@ import com.protelion.hexserver.R
 import com.protelion.hexserver.data.local.ServiceHexDao
 import com.protelion.hexserver.data.local.entity.HexEntity
 import com.protelion.hexserver.domain.usecase.GenerateHexUseCase
+import com.protelion.hexserver.domain.model.ServiceStatus
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
 
@@ -22,7 +23,7 @@ class HexService : Service() {
     private val hexDao: ServiceHexDao by inject()
     private val generateHexUseCase: GenerateHexUseCase by inject()
     
-    private var currentStatus = "STOPPED"
+    private var currentStatus = ServiceStatus.STOPPED
     private var isGenerating = false
     private var isPaused = false
     private var currentInterval = 1000L
@@ -31,12 +32,26 @@ class HexService : Service() {
     companion object {
         private const val CHANNEL_ID = "HexServiceChannel"
         private const val NOTIFICATION_ID = 1
-        const val CMD_START = "ACTION_START"
-        const val CMD_STOP = "ACTION_STOP"
-        const val CMD_TOGGLE_GEN = "ACTION_GENERATE"
-        const val CMD_PAUSE = "ACTION_PAUSE"
-        const val CMD_SET_INTERVAL = "ACTION_UPDATE_INTERVAL"
-        const val CMD_RESTORE = "ACTION_REQUEST_HISTORY"
+        
+        // Actions for Client -> Service
+        const val ACTION_START = "com.protelion.hexserver.ACTION_START"
+        const val ACTION_STOP = "com.protelion.hexserver.ACTION_STOP"
+        const val ACTION_TOGGLE_GEN = "com.protelion.hexserver.ACTION_TOGGLE_GEN"
+        const val ACTION_PAUSE = "com.protelion.hexserver.ACTION_PAUSE"
+        const val ACTION_SET_INTERVAL = "com.protelion.hexserver.ACTION_SET_INTERVAL"
+        const val ACTION_GET_HISTORY = "com.protelion.hexserver.ACTION_GET_HISTORY"
+        const val ACTION_GET_STATUS = "com.protelion.hexserver.ACTION_GET_STATUS"
+
+        // Internal Actions for Notification Buttons
+        private const val ACTION_NOTIF_TOGGLE = "com.protelion.hexserver.ACTION_NOTIF_TOGGLE"
+        private const val ACTION_NOTIF_PAUSE = "com.protelion.hexserver.ACTION_NOTIF_PAUSE"
+        private const val ACTION_NOTIF_EXIT = "com.protelion.hexserver.ACTION_NOTIF_EXIT"
+        
+        // Broadcast Actions
+        const val BROADCAST_STATUS = "com.protelion.hexserver.STATUS_UPDATE"
+        const val BROADCAST_NEW_HEX = "com.protelion.hexserver.NEW_HEX"
+        
+        const val EXTRA_RESULT_RECEIVER = "extra_receiver"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -47,45 +62,60 @@ class HexService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ensureForeground()
-        val action = intent?.action?.removePrefix("com.protelion.hexservice.")
+        val action = intent?.action
+        val receiver = intent?.getParcelableExtra<android.os.ResultReceiver>(EXTRA_RESULT_RECEIVER)
+
         when (action) {
-            "ACTION_START" -> startService()
-            "ACTION_STOP" -> stopService()
-            "ACTION_GENERATE" -> toggleGeneration()
-            "ACTION_PAUSE" -> togglePause()
-            "ACTION_UPDATE_INTERVAL" -> {
+            ACTION_START -> startService()
+            ACTION_STOP -> stopService()
+            ACTION_TOGGLE_GEN, ACTION_NOTIF_TOGGLE -> {
+                toggleGeneration()
+                sendConfirmation(receiver, "Generation toggled")
+            }
+            ACTION_PAUSE, ACTION_NOTIF_PAUSE -> {
+                togglePause()
+                sendConfirmation(receiver, "Pause toggled")
+            }
+            ACTION_SET_INTERVAL -> {
                 currentInterval = intent.getLongExtra("interval", 1000L)
                 sendStatus()
+                sendConfirmation(receiver, "Interval updated to ${currentInterval}ms")
             }
-            "ACTION_REQUEST_HISTORY" -> sendHistory()
-            "ACTION_GET_STATUS" -> sendStatus()
+            ACTION_GET_HISTORY -> sendHistory()
+            ACTION_GET_STATUS -> sendStatus()
+            ACTION_NOTIF_EXIT -> stopService()
+            else -> ensureForeground()
         }
         return START_STICKY
     }
 
+    private fun sendConfirmation(receiver: android.os.ResultReceiver?, message: String) {
+        receiver?.send(0, android.os.Bundle().apply { putString("message", message) })
+    }
+
     private fun startService() {
-        if (currentStatus == "STOPPED") {
-            currentStatus = "IDLE"
+        if (currentStatus == ServiceStatus.STOPPED) {
+            currentStatus = ServiceStatus.IDLE
             ensureForeground()
             sendStatus()
         }
     }
 
     private fun ensureForeground() {
+        val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
-                NOTIFICATION_ID, createNotification(),
+                NOTIFICATION_ID, notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
-            startForeground(NOTIFICATION_ID, createNotification())
+            startForeground(NOTIFICATION_ID, notification)
         }
     }
 
     private fun stopService() {
         generationJob?.cancel()
-        currentStatus = "STOPPED"
+        currentStatus = ServiceStatus.STOPPED
         isGenerating = false
         isPaused = false
         sendStatus()
@@ -98,11 +128,11 @@ class HexService : Service() {
             generationJob?.cancel()
             isGenerating = false
             isPaused = false
-            currentStatus = "IDLE"
+            currentStatus = ServiceStatus.IDLE
         } else {
             isGenerating = true
             isPaused = false
-            currentStatus = "GENERATING"
+            currentStatus = ServiceStatus.GENERATING
             startGeneration()
         }
         updateNotification()
@@ -128,28 +158,26 @@ class HexService : Service() {
     private fun togglePause() {
         if (isGenerating) {
             isPaused = !isPaused
-            currentStatus = if (isPaused) "PAUSED" else "GENERATING"
+            currentStatus = if (isPaused) ServiceStatus.PAUSED else ServiceStatus.GENERATING
             updateNotification()
             sendStatus()
         }
     }
 
     private fun sendStatus() {
-        val intent = Intent("com.protelion.hexservice.STATUS_UPDATE").apply {
-            putExtra("status", currentStatus)
+        val intent = Intent(BROADCAST_STATUS).apply {
+            putExtra("status", currentStatus.name)
             putExtra("isGenerating", isGenerating)
             putExtra("isPaused", isPaused)
             putExtra("interval", currentInterval)
             putExtra("totalGenerated", totalGeneratedCount)
-            setPackage("com.protelion.hexclient")
         }
         sendBroadcast(intent)
     }
 
     private fun sendHexBroadcast(hex: String) {
-        val intent = Intent("com.protelion.hexservice.NEW_HEX").apply {
+        val intent = Intent(BROADCAST_NEW_HEX).apply {
             putExtra("hex", hex)
-            setPackage("com.protelion.hexclient")
         }
         sendBroadcast(intent)
     }
@@ -167,7 +195,7 @@ class HexService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
-                "Hex Generator Service Channel",
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
@@ -182,19 +210,40 @@ class HexService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // Notification actions
+        val toggleIntent = Intent(this, HexService::class.java).apply { action = ACTION_NOTIF_TOGGLE }
+        val togglePending = PendingIntent.getService(this, 1, toggleIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val pauseIntent = Intent(this, HexService::class.java).apply { action = ACTION_NOTIF_PAUSE }
+        val pausePending = PendingIntent.getService(this, 2, pauseIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val exitIntent = Intent(this, HexService::class.java).apply { action = ACTION_NOTIF_EXIT }
+        val exitPending = PendingIntent.getService(this, 3, exitIntent, PendingIntent.FLAG_IMMUTABLE)
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Hex Generator Service")
-            .setContentText("Status: $currentStatus")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_status_format, currentStatus.name))
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .addAction(
+                android.R.drawable.ic_media_play,
+                if (isGenerating) getString(R.string.notif_stop_gen) else getString(R.string.notif_start_gen),
+                togglePending
+            )
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                if (isPaused) getString(R.string.notif_resume) else getString(R.string.notif_pause),
+                pausePending
+            )
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.notif_exit), exitPending)
 
         return builder.build()
     }
 
-    private fun updateNotification() {
+    private fun updateNotification(): Unit {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, createNotification())
     }

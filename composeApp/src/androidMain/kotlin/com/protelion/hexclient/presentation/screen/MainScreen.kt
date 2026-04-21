@@ -17,8 +17,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import com.protelion.hexclient.presentation.viewmodel.MainViewModel
+import androidx.compose.ui.res.stringResource
+import com.protelion.hexclient.R
 import com.protelion.hexclient.domain.model.HexCode
+import com.protelion.hexclient.domain.model.ServiceStatus
+import com.protelion.hexclient.presentation.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -71,7 +74,7 @@ fun MainScreen(viewModel: MainViewModel) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreenContent(
-    status: String,
+    status: ServiceStatus,
     isGenerating: Boolean,
     isPaused: Boolean,
     interval: Long,
@@ -91,10 +94,10 @@ fun MainScreenContent(
 
     val statusColor by animateColorAsState(
         targetValue = when(status) {
-            "GENERATING" -> MaterialTheme.colorScheme.primaryContainer
-            "PAUSED" -> MaterialTheme.colorScheme.secondaryContainer
-            "STOPPED" -> MaterialTheme.colorScheme.surfaceVariant
-            else -> MaterialTheme.colorScheme.tertiaryContainer
+            ServiceStatus.GENERATING -> MaterialTheme.colorScheme.primaryContainer
+            ServiceStatus.PAUSED -> MaterialTheme.colorScheme.secondaryContainer
+            ServiceStatus.STOPPED -> MaterialTheme.colorScheme.surfaceVariant
+            ServiceStatus.IDLE -> MaterialTheme.colorScheme.tertiaryContainer
         },
         animationSpec = tween(500),
         label = "StatusColorAnimation"
@@ -106,7 +109,7 @@ fun MainScreenContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Dark Mode", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.dark_mode), style = MaterialTheme.typography.titleMedium)
             Switch(checked = isDarkTheme, onCheckedChange = onToggleTheme)
         }
 
@@ -117,18 +120,24 @@ fun MainScreenContent(
             colors = CardDefaults.cardColors(containerColor = statusColor)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Status: $status", style = MaterialTheme.typography.headlineSmall)
-                Text("Local Count: $totalCount")
-                Text("Service Total: $totalGeneratedByService")
-                Text("Interval: ${interval}ms")
+                val displayStatus = when(status) {
+                    ServiceStatus.STOPPED -> stringResource(R.string.status_stopped)
+                    ServiceStatus.IDLE -> stringResource(R.string.status_idle)
+                    ServiceStatus.GENERATING -> stringResource(R.string.status_generating)
+                    ServiceStatus.PAUSED -> stringResource(R.string.status_paused)
+                }
+                Text(stringResource(R.string.status_format, displayStatus), style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.local_count_format, totalCount))
+                Text(stringResource(R.string.service_total_format, totalGeneratedByService))
+                Text(stringResource(R.string.interval_format, interval))
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Set Interval:", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.set_interval), style = MaterialTheme.typography.labelLarge)
         Slider(
             value = interval.toFloat(),
-            onValueChange = { onSendCommand("ACTION_UPDATE_INTERVAL", "interval", it.toLong()) },
+            onValueChange = { onSendCommand("ACTION_SET_INTERVAL", "interval", it.toLong()) },
             valueRange = 100f..5000f
         )
 
@@ -162,14 +171,14 @@ fun MainScreenContent(
                             )
                         }
                         IconButton(onClick = { onDeleteCode(hex.id) }) {
-                            Text("X")
+                            Text(stringResource(R.string.delete_label))
                         }
                     }
                 }
             }
         }
 
-        val isServiceRunning = status != "STOPPED"
+        val isServiceRunning = status != ServiceStatus.STOPPED
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
@@ -179,13 +188,13 @@ fun MainScreenContent(
                 onClick = { onSendCommand("ACTION_START", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = !isServiceRunning
-            ) { Text("Start Service") }
+            ) { Text(stringResource(R.string.start_service)) }
 
             Button(
-                onClick = { onSendCommand("ACTION_GENERATE", null, null) },
+                onClick = { onSendCommand("ACTION_TOGGLE_GEN", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning
-            ) { Text(if (isGenerating) "Stop Gen" else "Start Gen") }
+            ) { Text(if (isGenerating) stringResource(R.string.stop_gen) else stringResource(R.string.start_gen)) }
         }
 
         Row(
@@ -196,13 +205,13 @@ fun MainScreenContent(
                 onClick = { onSendCommand("ACTION_PAUSE", null, null) },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning && isGenerating
-            ) { Text(if (isPaused) "Resume" else "Pause") }
+            ) { Text(if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause)) }
 
             Button(
                 onClick = { onRestoreHistory() },
                 modifier = Modifier.weight(1f),
                 enabled = isServiceRunning
-            ) { Text("Restore 50") }
+            ) { Text(stringResource(R.string.restore_50)) }
         }
 
         Row(
@@ -212,12 +221,12 @@ fun MainScreenContent(
             OutlinedButton(
                 onClick = { onClearAll() },
                 modifier = Modifier.weight(1f)
-            ) { Text("Clear All") }
+            ) { Text(stringResource(R.string.clear_all)) }
 
             OutlinedButton(
                 onClick = { onExport() },
                 modifier = Modifier.weight(1f)
-            ) { Text("Export CSV") }
+            ) { Text(stringResource(R.string.export_csv)) }
         }
 
         Button(
@@ -225,6 +234,6 @@ fun MainScreenContent(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             enabled = isServiceRunning
-        ) { Text("Stop Service") }
+        ) { Text(stringResource(R.string.stop_service)) }
     }
 }

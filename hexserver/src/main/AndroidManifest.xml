@@ -29,16 +29,16 @@
             android:exported="true"
             android:foregroundServiceType="specialUse">
             <intent-filter>
-                <action android:name="com.protelion.hexservice.ACTION_START" />
-                <action android:name="com.protelion.hexservice.ACTION_STOP" />
-                <action android:name="com.protelion.hexservice.ACTION_GENERATE" />
-                <action android:name="com.protelion.hexservice.ACTION_PAUSE" />
-                <action android:name="com.protelion.hexservice.ACTION_UPDATE_INTERVAL" />
-                <action android:name="com.protelion.hexservice.ACTION_REQUEST_HISTORY" />
-                <action android:name="com.protelion.hexservice.ACTION_GET_STATUS" />
+                <action android:name="com.protelion.hexserver.ACTION_START" />
+                <action android:name="com.protelion.hexserver.ACTION_STOP" />
+                <action android:name="com.protelion.hexserver.ACTION_TOGGLE_GEN" />
+                <action android:name="com.protelion.hexserver.ACTION_PAUSE" />
+                <action android:name="com.protelion.hexserver.ACTION_SET_INTERVAL" />
+                <action android:name="com.protelion.hexserver.ACTION_GET_HISTORY" />
+                <action android:name="com.protelion.hexserver.ACTION_GET_STATUS" />
             </intent-filter>
             <property android:name="android.app.PROPERTY_SPECIAL_USE_CATEGORY"
-                android:value="Service provides generated hex codes to client applications" />
+                android:value="@string/property_special_use_description" />
         </service>
     </application>
 

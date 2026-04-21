@@ -25,7 +25,7 @@ interface ServiceHexDao {
     suspend fun getLast50(): List<HexEntity>
 }
 
-@Database(entities = [com.protelion.hexserver.data.local.entity.HexEntity::class], version = 1, exportSchema = false)
+@Database(entities = [HexEntity::class], version = 1, exportSchema = false)
 abstract class ServiceDatabase : RoomDatabase() {
     abstract fun serviceHexDao(): ServiceHexDao
 }

@@ -28,13 +28,5 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".data.service.HexService"
-            android:foregroundServiceType="specialUse"
-            android:exported="false">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_CATEGORY"
-                android:value="Explanation why this app needs HEX generation in background" />
-        </service>
-
     </application>
 </manifest>
