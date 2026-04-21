@@ -23,10 +23,13 @@ kotlin {
             implementation(libs.room.runtime)
             implementation(libs.room.ktx)
             implementation(libs.koin.android)
+            implementation(libs.androidx.compose.material.icons.extended)
+            implementation(libs.androidx.datastore.preferences)
         }
-        commonMain.dependencies {
+commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
+            implementation(libs.compose.material)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)

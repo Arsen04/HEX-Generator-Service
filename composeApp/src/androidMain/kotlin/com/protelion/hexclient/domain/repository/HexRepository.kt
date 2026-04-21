@@ -4,8 +4,10 @@ import com.protelion.hexclient.domain.model.HexCode
 import kotlinx.coroutines.flow.Flow
 
 interface HexRepository {
-    fun getLocalHistory(): Flow<List<HexCode>>
-    suspend fun saveCode(hex: HexCode)
+    fun getLatestCodes(limit: Int): Flow<List<HexCode>>
+    fun getTotalCount(): Flow<Int>
+    suspend fun getAllCodesList(): List<HexCode>
+    suspend fun insertHex(value: String)
     suspend fun deleteCode(id: Long)
-    suspend fun clearAll()
+    suspend fun deleteAll()
 }

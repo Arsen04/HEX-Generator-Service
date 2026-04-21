@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HEX Server</string>
+    <string name="notification_channel_name">Hex Generator Service Channel</string>
+    <string name="notification_title">Hex Generator Service</string>
+    <string name="notification_status_format">Status: %1$s</string>
+    <string name="property_special_use_description">Service provides generated hex codes to client applications</string>
+
+    <string name="notif_start_gen">Start Gen</string>
+    <string name="notif_stop_gen">Stop Gen</string>
+    <string name="notif_pause">Pause</string>
+    <string name="notif_resume">Resume</string>
+    <string name="notif_exit">Exit</string>
+    <string name="msg_gen_toggled">Generation toggled</string>
+    <string name="msg_pause_toggled">Pause toggled</string>
+    <string name="msg_interval_updated">Interval updated to %1$dms</string>
+</resources>

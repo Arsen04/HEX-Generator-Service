@@ -1,3 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">KotlinProject</string>
+    <string name="app_name">HEX Client</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="status_format">Status: %1$s</string>
+    <string name="local_count_format">Local Count: %1$d</string>
+    <string name="service_total_format">Service Total: %1$d</string>
+    <string name="interval_format">Interval: %1$dms</string>
+    <string name="set_interval">Set Interval:</string>
+    <string name="delete_label">X</string>
+    <string name="start_service">Start Service</string>
+    <string name="stop_service">Stop Service</string>
+    <string name="start_gen">Start Gen</string>
+    <string name="stop_gen">Stop Gen</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="restore_50">Restore 50</string>
+    <string name="clear_all">Clear All</string>
+    <string name="export_csv">Export CSV</string>
+
+    <string name="status_stopped">STOPPED</string>
+    <string name="status_idle">IDLE</string>
+    <string name="status_generating">GENERATING</string>
+    <string name="status_paused">PAUSED</string>
 </resources>
