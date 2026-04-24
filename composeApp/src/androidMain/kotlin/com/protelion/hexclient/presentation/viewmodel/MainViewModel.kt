@@ -8,7 +8,7 @@ import com.protelion.hexclient.domain.model.HexCode
 import com.protelion.hexclient.domain.model.ServiceStatus
 import com.protelion.hexclient.domain.repository.HexRepository
 import com.protelion.hexclient.domain.repository.SettingsRepository
-import com.protelion.hexclient.ipc.IpcConstants
+import com.protelion.ipc.IpcConstants
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 

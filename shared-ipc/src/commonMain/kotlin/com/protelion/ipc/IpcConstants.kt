@@ -1,4 +1,4 @@
-package com.protelion.hexclient.ipc
+package com.protelion.ipc
 
 object IpcConstants {
     // Actions for Client -> Service
