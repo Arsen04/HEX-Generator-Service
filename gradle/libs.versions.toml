@@ -44,9 +44,7 @@ compose-material = { module = "org.jetbrains.compose.material:material", version
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version = "1.7.6" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
-# Поддержка Kotlin Coroutines и Flow (нужна для ТЗ)
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
-# Компилятор для генерации кода (через KSP)
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycleService" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
