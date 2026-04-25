@@ -28,4 +28,7 @@ object IpcConstants {
     const val CLIENT_PACKAGE = "com.protelion.hexclient"
     const val SERVER_PACKAGE = "com.protelion.hexserver"
     const val SERVER_SERVICE_CLASS = "com.protelion.hexserver.data.service.HexService"
+
+    // Permissions
+    const val PERMISSION_CONTROL_SERVICE = "com.protelion.hexserver.PERMISSION_CONTROL_SERVICE"
 }
