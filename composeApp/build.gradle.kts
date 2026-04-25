@@ -26,7 +26,8 @@ kotlin {
             implementation(libs.androidx.compose.material.icons.extended)
             implementation(libs.androidx.datastore.preferences)
         }
-commonMain.dependencies {
+        commonMain.dependencies {
+            implementation(project(":shared-ipc"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material)

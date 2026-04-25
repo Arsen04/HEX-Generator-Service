@@ -13,7 +13,7 @@ import com.protelion.hexserver.data.local.ServiceHexDao
 import com.protelion.hexserver.data.local.entity.HexEntity
 import com.protelion.hexserver.domain.usecase.GenerateHexUseCase
 import com.protelion.hexserver.domain.model.ServiceStatus
-import com.protelion.hexserver.ipc.IpcConstants
+import com.protelion.ipc.IpcConstants
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
 

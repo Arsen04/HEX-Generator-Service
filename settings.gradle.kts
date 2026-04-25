@@ -33,3 +33,4 @@ dependencyResolutionManagement {
 
 include(":composeApp")
 include(":hexserver")
+include(":shared-ipc")
