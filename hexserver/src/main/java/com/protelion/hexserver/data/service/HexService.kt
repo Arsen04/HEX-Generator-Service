@@ -159,7 +159,7 @@ class HexService : Service() {
             putExtra(IpcConstants.EXTRA_TOTAL_GENERATED, totalGeneratedCount)
             setPackage(IpcConstants.CLIENT_PACKAGE)
         }
-        sendBroadcast(intent)
+        sendBroadcast(intent, IpcConstants.PERMISSION_CONTROL_SERVICE)
     }
 
     private fun sendHexBroadcast(hex: String) {
@@ -167,7 +167,7 @@ class HexService : Service() {
             putExtra(IpcConstants.EXTRA_HEX, hex)
             setPackage(IpcConstants.CLIENT_PACKAGE)
         }
-        sendBroadcast(intent)
+        sendBroadcast(intent, IpcConstants.PERMISSION_CONTROL_SERVICE)
     }
 
     private fun sendHistory() {
